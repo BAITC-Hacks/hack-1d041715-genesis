@@ -50,15 +50,3 @@ class WebTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Выберите аудиофайл".encode(), response.data)
-
-    def test_local_kz_ui_discloses_scope_and_accepts_audio(self) -> None:
-        """LOCAL_KZ is visibly local STT, not advertised as a closed pipeline."""
-        os.environ["APP_MODE"] = "local_kz"
-
-        response = self.client.get("/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("LOCAL_KZ".encode(), response.data)
-        self.assertIn("SPEAKER_00".encode(), response.data)
-        self.assertIn("OpenAI API".encode(), response.data)
-        self.assertIn(b'name="audio"', response.data)

@@ -9,7 +9,6 @@ from typing import Any
 from .config import get_settings
 from .demo import load_demo_segments
 from .diagnostics import log_provider_error
-from .local_kz import transcribe_kazakh_audio
 from .models import TranscriptSegment, TranscriptionResult
 from .transcription import (
     AudioTranscriptionError,
@@ -47,35 +46,9 @@ def transcribe_with_speakers(
         )
 
     if not audio_path:
-        raise DiarizationError("Необходимо выбрать аудиофайл.")
+        raise DiarizationError("В API-режиме необходимо выбрать аудиофайл.")
 
     path = validate_audio_file(audio_path)
-    if settings.is_local_kz:
-        local_result = transcribe_kazakh_audio(
-            path,
-            model_id=settings.local_kz_model,
-        )
-        warnings = [
-            "LOCAL_KZ: казахская транскрипция выполнена локально; "
-            "локальная диаризация недоступна, используется SPEAKER_00."
-        ]
-        if local_result.warning:
-            warnings.append(local_result.warning)
-        return TranscriptionResult(
-            segments=(
-                TranscriptSegment(
-                    speaker="SPEAKER_00",
-                    start=0.0,
-                    end=local_result.duration_seconds,
-                    text=local_result.text,
-                ),
-            ),
-            provider=f"local-kz:{settings.local_kz_model}",
-            mode="local_kz",
-            diarization_available=False,
-            warning=" ".join(warnings),
-        )
-
     transcription_client = client if client is not None else create_openai_client()
     try:
         with path.open("rb") as audio_file:

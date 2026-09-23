@@ -5,13 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from meeting_minutes.diarization import transcribe_with_speakers
-from meeting_minutes.local_kz import (
-    LocalKazakhDependenciesError,
-    LocalKazakhResult,
-)
 
 
 class FakeDiarizationClient:
@@ -143,43 +138,3 @@ class DiarizationTests(unittest.TestCase):
         self.assertEqual(result.segments[0].speaker, "SPEAKER_00")
         self.assertIn("Резервный", result.text)
         self.assertIn("OpenAI diarization failed", "\n".join(logs.output))
-
-    def test_local_kz_selects_local_provider_without_openai_stt(self) -> None:
-        """LOCAL_KZ uses one safe speaker and never calls the OpenAI STT client."""
-        os.environ["APP_MODE"] = "local_kz"
-        local_result = LocalKazakhResult(
-            text="Қазақша жыл санау.",
-            device="cuda:0",
-            duration_seconds=78.43,
-        )
-
-        with (
-            patch(
-                "meeting_minutes.diarization.transcribe_kazakh_audio",
-                return_value=local_result,
-            ) as transcribe_local,
-            patch("meeting_minutes.diarization.create_openai_client") as create_client,
-        ):
-            result = transcribe_with_speakers(self.audio_path)
-
-        transcribe_local.assert_called_once()
-        create_client.assert_not_called()
-        self.assertEqual(result.mode, "local_kz")
-        self.assertFalse(result.diarization_available)
-        self.assertEqual(result.segments[0].speaker, "SPEAKER_00")
-        self.assertEqual(result.segments[0].text, "Қазақша жыл санау.")
-        self.assertEqual(result.segments[0].end, 78.43)
-
-    def test_local_kz_reports_missing_optional_dependencies(self) -> None:
-        """A missing optional install produces an actionable error without fallback."""
-        os.environ["APP_MODE"] = "local_kz"
-
-        with patch(
-            "meeting_minutes.diarization.transcribe_kazakh_audio",
-            side_effect=LocalKazakhDependenciesError("Install .[local-kz]"),
-        ):
-            with self.assertRaisesRegex(
-                LocalKazakhDependenciesError,
-                "local-kz",
-            ):
-                transcribe_with_speakers(self.audio_path)
