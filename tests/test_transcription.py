@@ -7,7 +7,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from meeting_minutes.transcription import (
+    AudioFileNotFoundError,
     CorruptedAudioError,
+    TranscriptionServiceError,
     UnsupportedAudioFormatError,
     transcribe_audio,
 )
@@ -43,12 +45,41 @@ class TranscribeAudioTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.audio_path = Path(self.temp_dir.name) / "meeting.wav"
         self.audio_path.write_bytes(b"not-real-audio")
+        self.previous_app_mode = os.environ.get("APP_MODE")
         self.previous_mode = os.environ.pop("TRANSCRIPTION_MODE", None)
+        os.environ["APP_MODE"] = "api"
 
     def tearDown(self) -> None:
+        if self.previous_app_mode is None:
+            os.environ.pop("APP_MODE", None)
+        else:
+            os.environ["APP_MODE"] = self.previous_app_mode
         if self.previous_mode is not None:
             os.environ["TRANSCRIPTION_MODE"] = self.previous_mode
         self.temp_dir.cleanup()
+
+    def test_rejects_missing_file(self) -> None:
+        """A missing path fails before any provider call."""
+        with self.assertRaises(AudioFileNotFoundError):
+            transcribe_audio(Path(self.temp_dir.name) / "missing.wav")
+
+    def test_rejects_empty_audio_file(self) -> None:
+        """An empty supported file is treated as damaged."""
+        empty_path = Path(self.temp_dir.name) / "empty.mp3"
+        empty_path.touch()
+
+        with self.assertRaises(CorruptedAudioError):
+            transcribe_audio(empty_path)
+
+    def test_missing_key_has_a_clear_error(self) -> None:
+        """API mode reports a missing key without exposing an SDK traceback."""
+        previous_key = os.environ.pop("OPENAI_API_KEY", None)
+        try:
+            with self.assertRaisesRegex(TranscriptionServiceError, "OPENAI_API_KEY"):
+                transcribe_audio(self.audio_path)
+        finally:
+            if previous_key is not None:
+                os.environ["OPENAI_API_KEY"] = previous_key
 
     def test_returns_text_from_openai_compatible_client(self) -> None:
         """A valid API response exposes its text to the caller."""
@@ -73,6 +104,7 @@ class TranscribeAudioTests(unittest.TestCase):
 
     def test_demo_mode_does_not_need_an_api_client(self) -> None:
         """Demo mode permits a no-account project check with any supported file."""
+        os.environ["APP_MODE"] = "demo"
         os.environ["TRANSCRIPTION_MODE"] = "demo"
 
         result = transcribe_audio(self.audio_path)

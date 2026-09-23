@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .config import get_settings, load_environment
+
 
 SUPPORTED_AUDIO_EXTENSIONS = frozenset(
     {".flac", ".m4a", ".mp3", ".mp4", ".mpeg", ".mpga", ".ogg", ".wav", ".webm"}
@@ -63,7 +65,8 @@ def transcribe_audio(audio_path: str | Path, client: Any | None = None) -> str:
     """
     path = _validate_audio_file(audio_path)
 
-    if os.getenv("TRANSCRIPTION_MODE", "api").lower() == "demo":
+    settings = get_settings()
+    if settings.is_demo:
         return DEMO_TRANSCRIPT
 
     transcription_client = client if client is not None else _create_openai_client()
@@ -71,7 +74,7 @@ def transcribe_audio(audio_path: str | Path, client: Any | None = None) -> str:
     try:
         with path.open("rb") as audio_file:
             response = transcription_client.audio.transcriptions.create(
-                model="whisper-1",
+                model=settings.transcription_model,
                 file=audio_file,
                 response_format="text",
             )
@@ -113,6 +116,12 @@ def _validate_audio_file(audio_path: str | Path) -> Path:
 
 def _create_openai_client() -> Any:
     """Create the SDK client lazily so demo mode works without installed packages."""
+    load_environment()
+    if not os.getenv("OPENAI_API_KEY"):
+        raise TranscriptionServiceError(
+            "Не задан OPENAI_API_KEY. Добавьте ключ в environment/.env или включите APP_MODE=demo."
+        )
+
     try:
         from openai import OpenAI
     except ImportError as error:
@@ -120,4 +129,17 @@ def _create_openai_client() -> Any:
             "Не установлена библиотека openai. Выполните: pip install -r requirements.txt"
         ) from error
 
-    return OpenAI()
+    try:
+        return OpenAI()
+    except Exception as error:
+        raise TranscriptionServiceError("Не удалось создать клиент OpenAI.") from error
+
+
+def validate_audio_file(audio_path: str | Path) -> Path:
+    """Public compatibility wrapper for validation used by other audio providers."""
+    return _validate_audio_file(audio_path)
+
+
+def create_openai_client() -> Any:
+    """Public compatibility wrapper for creating the configured OpenAI client."""
+    return _create_openai_client()
