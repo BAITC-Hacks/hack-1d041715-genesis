@@ -9,3 +9,9 @@ build/
 dist/
 outputs/
 .qa_docx*/
+hf_home/
+.cache/huggingface/
+models/
+kazakh_stt_benchmark/
+*.safetensors
+pytorch_model*.bin

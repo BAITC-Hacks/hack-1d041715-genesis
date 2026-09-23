@@ -16,6 +16,8 @@
 
     {% if mode == 'demo' %}
       <div class="demo-warning"><strong>Demo/mock:</strong> транскрипт, поручения и саммари взяты из тестового fixture. Аудио не распознавалось.</div>
+    {% elif mode == 'local_kz' %}
+      <div class="warning"><strong>LOCAL_KZ:</strong> казахская транскрипция выполнена локально. Полноценной локальной диаризации нет, поэтому используется SPEAKER_00. Поручения и саммари обработаны через OpenAI API.</div>
     {% elif not protocol.metadata.diarization_available %}
       <div class="warning">Diarization была недоступна; транскрипт показан как речь одного говорящего.</div>
     {% endif %}

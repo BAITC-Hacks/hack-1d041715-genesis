@@ -35,6 +35,12 @@ def build_protocol(
                 if transcription.mode == "api"
                 else None
             ),
+            (
+                "LOCAL_KZ транскрибирует аудио локально, но поручения и саммари "
+                "передают текст во внешний OpenAI API; полный закрытый контур не обеспечен."
+                if transcription.mode == "local_kz"
+                else None
+            ),
         )
         if warning
     )

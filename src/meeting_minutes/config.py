@@ -24,11 +24,17 @@ class Settings:
     transcription_model: str
     diarization_model: str
     text_model: str
+    local_kz_model: str
 
     @property
     def is_demo(self) -> bool:
         """Return whether external API calls must be replaced with demo fixtures."""
         return self.mode == "demo"
+
+    @property
+    def is_local_kz(self) -> bool:
+        """Return whether local Kazakh speech recognition is selected."""
+        return self.mode == "local_kz"
 
 
 def get_settings() -> Settings:
@@ -36,8 +42,10 @@ def get_settings() -> Settings:
     load_environment()
     legacy_mode = os.getenv("TRANSCRIPTION_MODE")
     mode = os.getenv("APP_MODE", legacy_mode or "demo").strip().lower()
-    if mode not in {"demo", "api"}:
-        raise ValueError("APP_MODE должен иметь значение 'demo' или 'api'.")
+    if mode not in {"demo", "api", "local_kz"}:
+        raise ValueError(
+            "APP_MODE должен иметь значение 'demo', 'api' или 'local_kz'."
+        )
 
     return Settings(
         mode=mode,
@@ -46,4 +54,8 @@ def get_settings() -> Settings:
             "OPENAI_DIARIZATION_MODEL", "gpt-4o-transcribe-diarize"
         ),
         text_model=os.getenv("OPENAI_TEXT_MODEL", "gpt-6-astra"),
+        local_kz_model=os.getenv(
+            "LOCAL_KZ_MODEL",
+            "shyngys879/kazakh-whisper-large-v3-turbo",
+        ),
     )

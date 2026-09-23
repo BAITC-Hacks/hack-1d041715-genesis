@@ -15,6 +15,8 @@
 - загрузка аудио в форматах `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`,
   `wav`, `webm`;
 - транскрипция через OpenAI Transcriptions API;
+- опциональная локальная казахская транскрипция через
+  [`shyngys879/kazakh-whisper-large-v3-turbo`](https://huggingface.co/shyngys879/kazakh-whisper-large-v3-turbo);
 - speaker diarization с безопасным fallback на `SPEAKER_00`;
 - контекстное сопоставление speaker с именем без биометрии;
 - извлечение поручений со строгой JSON-схемой и исходной цитатой;
@@ -29,7 +31,7 @@
 
 ```text
 audio / demo fixture
-  → transcription and diarization
+  → OpenAI transcription + diarization / local Kazakh STT / demo
   → contextual speaker names
   → action items and summary
   → meeting protocol
@@ -39,7 +41,8 @@ audio / demo fixture
 
 Каждый этап расположен в отдельном модуле. Если optional diarization недоступна,
 API-режим пытается сохранить результат через обычную транскрипцию с одним
-говорящим.
+говорящим. `LOCAL_KZ` использует локальный STT и честный single-speaker fallback:
+полноценной локальной diarization в этом режиме пока нет.
 
 ## Архитектура и технологии
 
@@ -48,6 +51,8 @@ API-режим пытается сохранить результат через
 - OpenAI Python SDK — облачный API-режим;
 - `gpt-4o-transcribe-diarize` — speaker diarization;
 - `whisper-1` — совместимый резервный STT существующего модуля;
+- Transformers + PyTorch — опциональный локальный KZ STT, не входящий в обычную
+  установку;
 - Responses API Structured Outputs — структурированные поручения;
 - `python-docx` — DOCX-экспорт;
 - `unittest` — тесты без платных API-вызовов.
@@ -61,6 +66,7 @@ API-режим пытается сохранить результат через
 app entrypoint                 src/meeting_minutes/web.py
 transcription                  src/meeting_minutes/transcription.py
 diarization and fallback       src/meeting_minutes/diarization.py
+optional local Kazakh STT      src/meeting_minutes/local_kz.py
 speaker name inference         src/meeting_minutes/speaker_names.py
 task extraction                src/meeting_minutes/task_extraction.py
 summary                        src/meeting_minutes/summary.py
@@ -95,13 +101,14 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_TRANSCRIPTION_MODEL=whisper-1
 OPENAI_DIARIZATION_MODEL=gpt-4o-transcribe-diarize
 OPENAI_TEXT_MODEL=gpt-6-astra
+LOCAL_KZ_MODEL=shyngys879/kazakh-whisper-large-v3-turbo
 ```
 
 `.env` исключён из Git. Настоящий ключ нельзя добавлять в репозиторий.
 
 ## Единый запуск
 
-После установки команда одинакова для обоих режимов:
+После установки команда одинакова для всех режимов:
 
 ```powershell
 meeting-minutes
@@ -138,6 +145,57 @@ OPENAI_API_KEY=ваш_ключ
 Приложение ограничивает загрузку 25 МБ и показывает понятную ошибку вместо
 Python traceback.
 
+## LOCAL_KZ: локальная казахская транскрипция
+
+Обычная установка для `demo` и `api` не скачивает PyTorch и веса модели.
+Для `LOCAL_KZ` один раз установите optional dependencies. Проверенная CUDA-сборка
+для NVIDIA/Windows:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+python -m pip install -e ".[local-kz]"
+```
+
+Для CPU-only машины:
+
+```powershell
+python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[local-kz]"
+```
+
+Затем задайте режим и ключ для существующего downstream analysis:
+
+```dotenv
+APP_MODE=local_kz
+OPENAI_API_KEY=ваш_ключ
+LOCAL_KZ_MODEL=shyngys879/kazakh-whisper-large-v3-turbo
+```
+
+Запустите `meeting-minutes` и загрузите аудио. При первом использовании веса
+скачиваются в Hugging Face cache; можно использовать уже существующий cache,
+задав перед запуском `$env:HF_HOME = "C:\путь\к\hf_home"`. При доступной CUDA
+используется FP16, иначе приложение предупреждает о более медленном CPU fallback.
+Если optional dependencies не установлены или модель недоступна, UI показывает
+понятную ошибку. `demo` и `api` от этих зависимостей не зависят.
+
+Provider использует проверенную конфигурацию: `language="kk"`,
+`task="transcribe"`, 30-секундные chunks, `batch_size=1`, text-only output.
+Native long-form generation намеренно не используется из-за зацикливания в
+benchmark.
+
+`LOCAL_KZ` означает только локальный STT казахской речи. Диаризация локально не
+выполняется, поэтому транскрипт получает `SPEAKER_00`. Текст затем передаётся в
+OpenAI для существующих поручений и саммари: весь pipeline не является закрытым
+контуром.
+
+### Проверенный benchmark LOCAL_KZ
+
+- оборудование: NVIDIA RTX 3050 Laptop GPU;
+- аудио: 78,43 секунды;
+- inference: 15,34 секунды (FP16 CUDA);
+- модельный cache: примерно 1,51 ГБ.
+
 ## Как жюри проверить проект
 
 1. Выполнить команды раздела «Установка».
@@ -169,32 +227,38 @@ Python traceback.
 python -m unittest discover -s tests -v
 ```
 
-Тесты не обращаются к платным API. Они проверяют ошибки аудиофайла, demo STT,
-формат diarization, fallback, имена speaker, поручения с `null`, фильтрацию задач
-без исходной цитаты, summary, объект протокола, DOCX и web flow.
+Тесты не обращаются к платным API и не загружают локальную модель. Они проверяют
+ошибки аудиофайла, demo STT, формат diarization, fallback, выбор LOCAL_KZ,
+CUDA→CPU fallback, имена speaker, поручения с `null`, фильтрацию задач без исходной
+цитаты, summary, объект протокола, DOCX и web flow.
 
 ## Данные и интеграции
 
 - Demo fixture содержит синтетический русский, казахский и смешанный RU/KZ текст.
 - В API-режиме аудио и транскрипт передаются в OpenAI.
+- В LOCAL_KZ аудио обрабатывается локально, но полученный текст передаётся в
+  OpenAI для извлечения поручений и саммари.
 - База данных, авторизация и постоянное серверное хранение не используются.
 - Загруженный файл находится только во временном каталоге на время обработки.
 
 ## Известные ограничения
 
-1. **Нет закрытого контура.** Облачный API-режим передаёт аудио и текст внешнему
-   сервису и не подходит для чувствительных данных промышленного заказчика.
-2. Реальная точность русского, казахского и смешанного аудио не подтверждена на
-   предоставленном корпусе — в репозитории нет реальных аудиозаписей.
+1. **Нет полного закрытого контура.** API-режим передаёт аудио и текст внешнему
+   сервису; LOCAL_KZ оставляет аудио локально, но передаёт транскрипт во внешний
+   OpenAI API для анализа.
+2. LOCAL_KZ проверен на одном предоставленном казахском аудио; это не заменяет
+   оценку качества на репрезентативном RU/KZ и mixed корпусе.
 3. Demo использует fixture/mock-данные и не является доказательством качества STT
    или LLM.
 4. Сопоставление имён основано на контекстных фразах и не выполняет биометрическую
    идентификацию.
 5. При недоступной diarization весь fallback-транскрипт относится к
-   `SPEAKER_00`.
+   `SPEAKER_00`; в LOCAL_KZ полноценной локальной diarization пока нет.
 6. `whisper-1` и текущая diarization-модель объявлены к отключению 26 февраля
    2027 года; значения вынесены в конфигурацию для миграции.
-7. Результаты скачивания хранятся только в памяти процесса и исчезают после
+7. LOCAL_KZ требует отдельной тяжёлой установки; model cache занимает около
+   1,51 ГБ, а CPU fallback заметно медленнее GPU.
+8. Результаты скачивания хранятся только в памяти процесса и исчезают после
    перезапуска приложения.
 
 ## Путь к промышленному закрытому контуру
@@ -207,7 +271,7 @@ Pipeline отделён от конкретных provider-вызовов. Дл�
 
 ## Дальнейшее развитие
 
-- подключить локальные STT, diarization и LLM providers;
+- подключить локальные diarization и LLM providers;
 - провести оценку качества на реальных RU/KZ и mixed записях;
 - добавить ручное исправление speaker-name перед экспортом;
 - нормализовать относительные сроки, сохраняя исходную формулировку;

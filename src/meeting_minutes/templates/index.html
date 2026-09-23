@@ -20,6 +20,12 @@
         <h2 id="mode-title">Демонстрационный режим</h2>
         <p>Аудио не распознаётся. Система использует открыто обозначенный тестовый RU/KZ fixture, затем реально собирает протокол и DOCX.</p>
       </section>
+    {% elif mode == 'local_kz' %}
+      <section class="mode-card api" aria-labelledby="mode-title">
+        <span class="badge">LOCAL_KZ · ЛОКАЛЬНЫЙ KZ STT</span>
+        <h2 id="mode-title">Локальное распознавание казахской речи</h2>
+        <p>Аудио распознаётся локальной моделью. Локальной диаризации пока нет, поэтому используется SPEAKER_00. Поручения и саммари обрабатываются OpenAI API — это не полный закрытый контур.</p>
+      </section>
     {% else %}
       <section class="mode-card api" aria-labelledby="mode-title">
         <span class="badge">API · ОБЛАЧНЫЙ РЕЖИМ</span>
@@ -31,7 +37,7 @@
     {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
 
     <form class="panel" method="post" action="{{ url_for('process') }}" enctype="multipart/form-data" onsubmit="showProgress()">
-      {% if mode == 'api' %}
+      {% if mode in ('api', 'local_kz') %}
         <label for="audio">Аудиофайл MP3 WAV M4A OGG WEBM</label>
         <input id="audio" name="audio" type="file" accept=".mp3,.wav,.m4a,.ogg,.webm,.flac,.mp4,.mpeg,.mpga" required>
       {% else %}

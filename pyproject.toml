@@ -14,6 +14,15 @@ dependencies = [
     "python-dotenv>=1.0,<2.0",
 ]
 
+[project.optional-dependencies]
+local-kz = [
+    "accelerate>=1.0,<2.0",
+    "soundfile>=0.13,<1.0",
+    "torch>=2.6,<3.0",
+    "torchaudio>=2.6,<3.0",
+    "transformers>=5.17,<6.0",
+]
+
 [project.scripts]
 meeting-minutes = "meeting_minutes.web:main"
 

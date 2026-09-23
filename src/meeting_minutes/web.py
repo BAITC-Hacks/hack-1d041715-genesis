@@ -39,7 +39,7 @@ def create_app() -> Flask:
             else:
                 upload = request.files.get("audio")
                 if upload is None or not upload.filename:
-                    raise ValueError("Выберите аудиофайл для обработки в API-режиме.")
+                    raise ValueError("Выберите аудиофайл для обработки.")
                 filename = secure_filename(upload.filename)
                 suffix = Path(filename).suffix or Path(upload.filename).suffix
                 with tempfile.TemporaryDirectory(prefix="meeting-minutes-") as temp_dir:
