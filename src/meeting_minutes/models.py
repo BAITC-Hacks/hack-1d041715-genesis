@@ -19,8 +19,10 @@ class TranscriptSegment:
 
     @property
     def display_speaker(self) -> str:
-        """Return a contextual name when known, otherwise the technical label."""
-        return self.speaker_name or self.speaker
+        """Return a contextual name with its auditable technical label."""
+        if self.speaker_name:
+            return f"{self.speaker_name} ({self.speaker})"
+        return self.speaker
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""

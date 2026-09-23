@@ -45,6 +45,67 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(name_by_speaker["SPEAKER_02"], "Нурлан Сагатович")
         self.assertEqual(name_by_speaker["SPEAKER_03"], "Айгуль")
 
+    def test_does_not_treat_sentence_after_ya_as_a_speaker_name(self) -> None:
+        """Ordinary speech after ``я`` must never replace the technical label."""
+        segments = (
+            TranscriptSegment(
+                "SPEAKER_02",
+                44.2,
+                49.0,
+                "Полную картину я сейчас не отдам.",
+            ),
+        )
+
+        named = infer_speaker_names(segments)
+
+        self.assertIsNone(named[0].speaker_name)
+        self.assertEqual(named[0].display_speaker, "SPEAKER_02")
+
+    def test_maps_direct_address_to_next_reply(self) -> None:
+        """A clear invitation maps the next responding speaker to the addressed name."""
+        segments = (
+            TranscriptSegment(
+                "SPEAKER_00", 0.0, 2.0, "Гульмира Сериковна, вам слово"
+            ),
+            TranscriptSegment(
+                "SPEAKER_01", 2.0, 5.0, "Спасибо. По итогам месяца..."
+            ),
+        )
+
+        named = infer_speaker_names(segments)
+
+        self.assertEqual(named[1].speaker_name, "Гульмира Сериковна")
+        self.assertEqual(
+            named[1].display_speaker,
+            "Гульмира Сериковна (SPEAKER_01)",
+        )
+
+    def test_maps_address_split_across_same_speaker_segments(self) -> None:
+        """Provider segmentation may split the name from the invitation to speak."""
+        segments = (
+            TranscriptSegment("SPEAKER_00", 0.0, 1.0, "Гульмира Сериковна,"),
+            TranscriptSegment("SPEAKER_00", 1.0, 2.0, "вам слово."),
+            TranscriptSegment("SPEAKER_01", 2.0, 3.0, "Спасибо."),
+        )
+
+        named = infer_speaker_names(segments)
+
+        self.assertEqual(named[2].speaker_name, "Гульмира Сериковна")
+
+    def test_keeps_turn_specific_names_when_provider_merges_speakers(self) -> None:
+        """Conflicting contextual names apply only to their evidenced reply turns."""
+        segments = (
+            TranscriptSegment("SPEAKER_00", 0.0, 1.0, "Тимур Болатович, что у вас?"),
+            TranscriptSegment("SPEAKER_02", 1.0, 2.0, "Проект готов на 60%."),
+            TranscriptSegment("SPEAKER_00", 2.0, 3.0, "Нурлан Сагатович, что произошло?"),
+            TranscriptSegment("SPEAKER_02", 3.0, 4.0, "Была разгерметизация."),
+        )
+
+        named = infer_speaker_names(segments)
+
+        self.assertEqual(named[1].speaker_name, "Тимур Болатович")
+        self.assertEqual(named[3].speaker_name, "Нурлан Сагатович")
+
     def test_demo_tasks_preserve_unknown_assignee_and_deadline(self) -> None:
         """The fixture demonstrates null values instead of invented facts."""
         os.environ["APP_MODE"] = "demo"

@@ -106,13 +106,18 @@ def _parse_diarized_segments(raw_segments: Iterable[Any]) -> tuple[TranscriptSeg
     parsed: list[TranscriptSegment] = []
 
     for raw in raw_segments:
-        raw_speaker = str(_field(raw, "speaker", "unknown"))
-        normalized = speaker_ids.setdefault(
-            raw_speaker, f"SPEAKER_{len(speaker_ids):02d}"
-        )
         text = str(_field(raw, "text", "")).strip()
         if not text:
             continue
+        raw_speaker = _field(raw, "speaker", None)
+        speaker_text = str(raw_speaker).strip() if raw_speaker is not None else ""
+        if not speaker_text or speaker_text.lower() in {"unknown", "none", "null"}:
+            speaker_key = f"__unlabeled_segment_{len(parsed)}"
+        else:
+            speaker_key = f"provider_label:{speaker_text}"
+        normalized = speaker_ids.setdefault(
+            speaker_key, f"SPEAKER_{len(speaker_ids):02d}"
+        )
         parsed.append(
             TranscriptSegment(
                 speaker=normalized,
