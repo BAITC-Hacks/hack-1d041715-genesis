@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from meeting_minutes.transcription import (
     AudioFileNotFoundError,
@@ -19,6 +20,14 @@ class FakeBadRequest(Exception):
     """Minimal API-like validation error used to simulate corrupted audio."""
 
     status_code = 400
+
+
+class FakeDetailedError(Exception):
+    """API-like failure carrying safe diagnostic fields."""
+
+    status_code = 401
+    code = "invalid_api_key"
+    request_id = "req_test_123"
 
 
 class FakeTranscriptionClient:
@@ -75,14 +84,20 @@ class TranscribeAudioTests(unittest.TestCase):
         """API mode reports a missing key without exposing an SDK traceback."""
         previous_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
-            for key_value in (None, "your_openai_api_key_here"):
-                with self.subTest(key_value=key_value):
-                    if key_value is None:
-                        os.environ.pop("OPENAI_API_KEY", None)
-                    else:
-                        os.environ["OPENAI_API_KEY"] = key_value
-                    with self.assertRaisesRegex(TranscriptionServiceError, "OPENAI_API_KEY"):
-                        transcribe_audio(self.audio_path)
+            with (
+                patch("meeting_minutes.config.load_environment"),
+                patch("meeting_minutes.transcription.load_environment"),
+            ):
+                for key_value in (None, "your_openai_api_key_here"):
+                    with self.subTest(key_value=key_value):
+                        if key_value is None:
+                            os.environ.pop("OPENAI_API_KEY", None)
+                        else:
+                            os.environ["OPENAI_API_KEY"] = key_value
+                        with self.assertRaisesRegex(
+                            TranscriptionServiceError, "OPENAI_API_KEY"
+                        ):
+                            transcribe_audio(self.audio_path)
         finally:
             if previous_key is not None:
                 os.environ["OPENAI_API_KEY"] = previous_key
@@ -107,6 +122,31 @@ class TranscribeAudioTests(unittest.TestCase):
 
         with self.assertRaises(CorruptedAudioError):
             transcribe_audio(self.audio_path, client)
+
+    def test_logs_api_failure_details_without_exposing_key(self) -> None:
+        """Server diagnostics retain provider metadata and redact credentials."""
+        secret = "sk-test-secret-value"
+        previous_key = os.environ.get("OPENAI_API_KEY")
+        os.environ["OPENAI_API_KEY"] = secret
+        client = FakeTranscriptionClient(
+            error=FakeDetailedError(f"Rejected credential {secret}")
+        )
+        try:
+            with self.assertLogs("meeting_minutes.transcription", level="ERROR") as logs:
+                with self.assertRaises(TranscriptionServiceError):
+                    transcribe_audio(self.audio_path, client)
+        finally:
+            if previous_key is None:
+                os.environ.pop("OPENAI_API_KEY", None)
+            else:
+                os.environ["OPENAI_API_KEY"] = previous_key
+
+        output = "\n".join(logs.output)
+        self.assertIn("status_code=401", output)
+        self.assertIn("code=invalid_api_key", output)
+        self.assertIn("request_id=req_test_123", output)
+        self.assertIn("[REDACTED]", output)
+        self.assertNotIn(secret, output)
 
     def test_demo_mode_does_not_need_an_api_client(self) -> None:
         """Demo mode permits a no-account project check with any supported file."""

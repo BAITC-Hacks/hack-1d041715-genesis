@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 from .config import get_settings, load_environment
+from .diagnostics import log_provider_error
 
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_AUDIO_EXTENSIONS = frozenset(
     {".flac", ".m4a", ".mp3", ".mp4", ".mpeg", ".mpga", ".ogg", ".wav", ".webm"}
@@ -79,8 +83,20 @@ def transcribe_audio(audio_path: str | Path, client: Any | None = None) -> str:
                 response_format="text",
             )
     except OSError as error:
+        logger.error(
+            "Audio file read failed: filename=%s error_type=%s message=%s",
+            path.name,
+            type(error).__name__,
+            str(error),
+        )
         raise CorruptedAudioError(f"Не удалось прочитать аудиофайл: {path.name}") from error
     except Exception as error:  # API-specific types differ across SDK releases.
+        log_provider_error(
+            logger,
+            operation="OpenAI fallback transcription",
+            model=settings.transcription_model,
+            error=error,
+        )
         if getattr(error, "status_code", None) in {400, 422}:
             raise CorruptedAudioError(
                 "OpenAI не смог распознать аудио. Файл может быть повреждён."

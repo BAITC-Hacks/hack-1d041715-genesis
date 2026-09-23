@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from typing import Any
 
 from .config import get_settings
 from .demo import load_demo_segments
+from .diagnostics import log_provider_error
 from .models import TranscriptSegment, TranscriptionResult
 from .transcription import (
     AudioTranscriptionError,
@@ -14,6 +16,9 @@ from .transcription import (
     transcribe_audio,
     validate_audio_file,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class DiarizationError(RuntimeError):
@@ -63,6 +68,12 @@ def transcribe_with_speakers(
             diarization_available=True,
         )
     except Exception as diarization_error:
+        log_provider_error(
+            logger,
+            operation="OpenAI diarization",
+            model=settings.diarization_model,
+            error=diarization_error,
+        )
         try:
             transcript = transcribe_audio(path, client=transcription_client)
         except AudioTranscriptionError as transcription_error:

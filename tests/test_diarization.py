@@ -73,11 +73,13 @@ class DiarizationTests(unittest.TestCase):
         """Optional diarization failure does not abort a valid transcription."""
         os.environ["APP_MODE"] = "api"
 
-        result = transcribe_with_speakers(
-            self.audio_path,
-            FakeDiarizationClient(diarization_error=RuntimeError("unavailable")),
-        )
+        with self.assertLogs("meeting_minutes.diarization", level="ERROR") as logs:
+            result = transcribe_with_speakers(
+                self.audio_path,
+                FakeDiarizationClient(diarization_error=RuntimeError("unavailable")),
+            )
 
         self.assertFalse(result.diarization_available)
         self.assertEqual(result.segments[0].speaker, "SPEAKER_00")
         self.assertIn("Резервный", result.text)
+        self.assertIn("OpenAI diarization failed", "\n".join(logs.output))
