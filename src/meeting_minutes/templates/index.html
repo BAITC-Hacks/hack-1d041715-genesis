@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Автопротокол совещаний</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">HackAlem AI · Самрук-Казына</p>
+      <h1>Автопротокол совещаний</h1>
+      <p class="lead">Транскрипт по говорящим, поручения, краткое саммари и готовый DOCX.</p>
+    </header>
+
+    {% if mode == 'demo' %}
+      <section class="mode-card demo" aria-labelledby="mode-title">
+        <span class="badge">DEMO · БЕЗ API</span>
+        <h2 id="mode-title">Демонстрационный режим</h2>
+        <p>Аудио не распознаётся. Система использует открыто обозначенный тестовый RU/KZ fixture, затем реально собирает протокол и DOCX.</p>
+      </section>
+    {% else %}
+      <section class="mode-card api" aria-labelledby="mode-title">
+        <span class="badge">API · ОБЛАЧНЫЙ РЕЖИМ</span>
+        <h2 id="mode-title">Обработка реального аудио</h2>
+        <p>Файл будет передан во внешний OpenAI API. Этот MVP не соответствует требованиям закрытого контура для чувствительных данных.</p>
+      </section>
+    {% endif %}
+
+    {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+
+    <form class="panel" method="post" action="{{ url_for('process') }}" enctype="multipart/form-data" onsubmit="showProgress()">
+      {% if mode == 'api' %}
+        <label for="audio">Аудиофайл MP3 WAV M4A OGG WEBM</label>
+        <input id="audio" name="audio" type="file" accept=".mp3,.wav,.m4a,.ogg,.webm,.flac,.mp4,.mpeg,.mpga" required>
+      {% else %}
+        <div class="flow">demo fixture → speakers → tasks → summary → protocol → DOCX</div>
+      {% endif %}
+      <button id="submit-button" type="submit">{% if mode == 'demo' %}Запустить демонстрацию{% else %}Обработать аудио{% endif %}</button>
+      <p id="progress" class="progress" aria-live="polite"></p>
+    </form>
+  </main>
+  <script>
+    function showProgress() {
+      const button = document.getElementById('submit-button');
+      button.disabled = true;
+      document.getElementById('progress').textContent = 'Обработка выполняется…';
+    }
+  </script>
+</body>
+</html>

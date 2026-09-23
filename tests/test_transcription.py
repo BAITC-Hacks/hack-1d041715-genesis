@@ -75,8 +75,14 @@ class TranscribeAudioTests(unittest.TestCase):
         """API mode reports a missing key without exposing an SDK traceback."""
         previous_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
-            with self.assertRaisesRegex(TranscriptionServiceError, "OPENAI_API_KEY"):
-                transcribe_audio(self.audio_path)
+            for key_value in (None, "your_openai_api_key_here"):
+                with self.subTest(key_value=key_value):
+                    if key_value is None:
+                        os.environ.pop("OPENAI_API_KEY", None)
+                    else:
+                        os.environ["OPENAI_API_KEY"] = key_value
+                    with self.assertRaisesRegex(TranscriptionServiceError, "OPENAI_API_KEY"):
+                        transcribe_audio(self.audio_path)
         finally:
             if previous_key is not None:
                 os.environ["OPENAI_API_KEY"] = previous_key

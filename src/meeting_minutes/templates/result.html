@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Готовый протокол</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <main class="shell result-shell">
+    <nav><a class="back" href="{{ url_for('index') }}">← Новая обработка</a></nav>
+    <header class="result-header">
+      <div><p class="eyebrow">Результат обработки</p><h1>Протокол совещания</h1></div>
+      <a class="download" href="{{ url_for('download', result_id=result_id) }}">Скачать DOCX</a>
+    </header>
+
+    {% if mode == 'demo' %}
+      <div class="demo-warning"><strong>Demo/mock:</strong> транскрипт, поручения и саммари взяты из тестового fixture. Аудио не распознавалось.</div>
+    {% elif not protocol.metadata.diarization_available %}
+      <div class="warning">Diarization была недоступна; транскрипт показан как речь одного говорящего.</div>
+    {% endif %}
+
+    <section class="content-section"><h2>Краткое саммари</h2><p>{{ protocol.summary }}</p></section>
+    <section class="content-section">
+      <h2>Поручения</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Поручение</th><th>Ответственный</th><th>Срок</th></tr></thead>
+        <tbody>
+        {% for task in protocol.tasks %}
+          <tr><td>{{ task.task }}</td><td>{{ task.assignee or 'Не указано' }}</td><td>{{ task.deadline or 'Не указано' }}</td></tr>
+        {% else %}
+          <tr><td colspan="3">Поручения не найдены</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+    <section class="content-section">
+      <h2>Транскрипт по говорящим</h2>
+      <div class="transcript">
+      {% for segment in protocol.transcript %}
+        <article class="utterance">
+          <div class="speaker">{{ segment.display_speaker }} <span>{{ '%.1f'|format(segment.start) }}–{{ '%.1f'|format(segment.end) }} с</span></div>
+          <p>{{ segment.text }}</p>
+        </article>
+      {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

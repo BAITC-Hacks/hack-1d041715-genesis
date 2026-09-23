@@ -117,7 +117,8 @@ def _validate_audio_file(audio_path: str | Path) -> Path:
 def _create_openai_client() -> Any:
     """Create the SDK client lazily so demo mode works without installed packages."""
     load_environment()
-    if not os.getenv("OPENAI_API_KEY"):
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key or api_key == "your_openai_api_key_here":
         raise TranscriptionServiceError(
             "Не задан OPENAI_API_KEY. Добавьте ключ в environment/.env или включите APP_MODE=demo."
         )
